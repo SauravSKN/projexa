@@ -1,6 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import { healthRouter } from './routes/healthRoutes.js';
+import { userRouter } from './routes/userRoutes.js';
+import { teamRouter } from './routes/teamRoutes.js';
+import { projectRouter } from './routes/projectRoutes.js';
+import { dashboardRouter } from './routes/dashboardRoutes.js';
 
 export function createApp() {
   const app = express();
@@ -11,6 +15,12 @@ export function createApp() {
   // Health check endpoints
   app.use('/api/health', healthRouter);
   app.use('/api/v1/health', healthRouter);
+
+  // Mount API v1 core routes
+  app.use('/api/v1/users', userRouter);
+  app.use('/api/v1/teams', teamRouter);
+  app.use('/api/v1/projects', projectRouter);
+  app.use('/api/v1/dashboard', dashboardRouter);
 
   // Central 404 handler
   app.use((req, res) => {
