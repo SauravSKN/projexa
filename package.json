@@ -1,0 +1,25 @@
+{
+  "name": "projexa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PROJEXA — Academic Project Management Platform (MERN Monorepo)",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "type": "module",
+  "scripts": {
+    "start": "npm --prefix server start",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "test": "npm --prefix server test",
+    "test:server": "npm --prefix server test",
+    "build:client": "npm --prefix client run build"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "author": "PROJEXA Development Team",
+  "license": "UNLICENSED"
+}
