@@ -49,20 +49,11 @@ function getDevStoredTeams() {
       status: 'finalized',
       guideId: '690100000000000000000011',
       guideName: 'Dr Ananya Shah',
-      members: [
-        { id: '690100000000000000000021', fullName: 'Aarav Patel', email: 'student.a@demo.projexa.invalid' },
-        { id: '690100000000000000000022', fullName: 'Diya Rao', email: 'student.b@demo.projexa.invalid' },
-        { id: '690100000000000000000023', fullName: 'Ishaan Das', email: 'student.c@demo.projexa.invalid' },
-        { id: '690100000000000000000024', fullName: 'Meera Nair', email: 'student.d@demo.projexa.invalid' },
-      ],
-      projectTitle: 'Projexa Demo Capstone',
+      members: SEED_STUDENTS.slice(0, 4),
+      projectTitle: 'Projexa Academic Platform',
     },
   ];
-  try {
-    sessionStorage.setItem(DEV_TEAMS_KEY, JSON.stringify(initial));
-  } catch {
-    // ignore
-  }
+  saveDevStoredTeams(initial);
   return initial;
 }
 
@@ -81,12 +72,14 @@ function saveDevStoredTeams(teams) {
 export async function getTeams() {
   try {
     const response = await fetch('/api/v1/teams', {
+      credentials: 'include',
       headers: getAuthHeaders(),
     });
     if (response.ok) {
       const json = await response.json();
-      if (json.success && Array.isArray(json.data)) {
-        return { success: true, data: json.data, isLiveApi: true };
+      const list = Array.isArray(json.data) ? json.data : json.data?.teams;
+      if (json.success && Array.isArray(list)) {
+        return { success: true, data: list, isLiveApi: true };
       }
     }
     throw new Error(`API returned HTTP ${response.status}`);
@@ -104,12 +97,14 @@ export async function getTeams() {
 export async function getEligibleStudents() {
   try {
     const response = await fetch('/api/v1/users?role=student', {
+      credentials: 'include',
       headers: getAuthHeaders(),
     });
     if (response.ok) {
       const json = await response.json();
-      if (json.success && Array.isArray(json.data)) {
-        return { success: true, data: json.data, isLiveApi: true };
+      const list = Array.isArray(json.data) ? json.data : json.data?.users;
+      if (json.success && Array.isArray(list)) {
+        return { success: true, data: list, isLiveApi: true };
       }
     }
     throw new Error(`API returned HTTP ${response.status}`);
@@ -127,12 +122,14 @@ export async function getEligibleStudents() {
 export async function getEligibleGuides() {
   try {
     const response = await fetch('/api/v1/users?role=guide', {
+      credentials: 'include',
       headers: getAuthHeaders(),
     });
     if (response.ok) {
       const json = await response.json();
-      if (json.success && Array.isArray(json.data)) {
-        return { success: true, data: json.data, isLiveApi: true };
+      const list = Array.isArray(json.data) ? json.data : json.data?.users;
+      if (json.success && Array.isArray(list)) {
+        return { success: true, data: list, isLiveApi: true };
       }
     }
     throw new Error(`API returned HTTP ${response.status}`);
@@ -167,13 +164,15 @@ export async function createTeam({ name, session, memberIds, guideId }) {
   try {
     const response = await fetch('/api/v1/teams', {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders(),
       body: JSON.stringify({ name: name.trim(), session: session.trim(), memberIds, guideId: guideId || null }),
     });
 
     const json = await response.json();
     if (response.ok && json.success) {
-      return { success: true, data: json.data, isLiveApi: true };
+      const data = json.data?.team || json.data;
+      return { success: true, data, isLiveApi: true };
     }
     return { success: false, error: json.error || { code: 'API_ERROR', message: `Server error ${response.status}` } };
   } catch (err) {
@@ -212,13 +211,15 @@ export async function assignTeamGuide(teamId, guideId) {
   try {
     const response = await fetch(`/api/v1/teams/${teamId}`, {
       method: 'PATCH',
+      credentials: 'include',
       headers: getAuthHeaders(),
       body: JSON.stringify({ guideId: guideId || null }),
     });
 
     const json = await response.json();
     if (response.ok && json.success) {
-      return { success: true, data: json.data, isLiveApi: true };
+      const data = json.data?.team || json.data;
+      return { success: true, data, isLiveApi: true };
     }
     return { success: false, error: json.error || { code: 'API_ERROR', message: `Server error ${response.status}` } };
   } catch (err) {

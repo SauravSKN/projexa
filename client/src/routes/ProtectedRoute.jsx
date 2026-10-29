@@ -6,17 +6,25 @@ import { useAuthSession } from '../services/authSession';
  * Route protection guard for role-scoped portals.
  *
  * Implements role restrictions:
+ * - Shows loading state during active session verification.
  * - Rejects unauthenticated visits.
- * - Enforces role restrictions (e.g., Guide cannot load Admin routes and vice-versa).
- * - Displays a standard accessible 403 Forbidden screen on role mismatch without
- *   leaking protected metadata.
- * - In development mode, provides role switching for QA testing that re-evaluates
- *   access and navigates cleanly without getting stuck on forbidden URLs.
+ * - Enforces role restrictions (Student, Guide, Admin).
+ * - Displays a standard accessible 403 Forbidden screen on role mismatch.
+ * - In development mode, provides session simulation helpers for QA testing.
+ * - In production mode, redirects unauthenticated requests cleanly to /login.
  */
 export default function ProtectedRoute({ allowedRoles = [] }) {
-  const { user, role, isAuthenticated, isDevMode, mockMode, switchDevRole } = useAuthSession();
+  const { user, role, isAuthenticated, isLoading, isDevMode, mockMode, switchDevRole } = useAuthSession();
   const navigate = useNavigate();
   const location = useLocation();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <p role="status" className="text-slate-600 font-medium">Checking your session…</p>
+      </div>
+    );
+  }
 
   // 1. Unauthenticated handling
   if (!isAuthenticated) {
@@ -36,9 +44,9 @@ export default function ProtectedRoute({ allowedRoles = [] }) {
                 Dev Session Simulator
               </p>
               <p className="text-xs text-slate-600 mb-3">
-                Member 1 owns production login. Select a persona below to simulate an authenticated session:
+                Select a persona below to simulate an authenticated session, or sign in with real credentials:
               </p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 mb-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -60,6 +68,12 @@ export default function ProtectedRoute({ allowedRoles = [] }) {
                   Simulate Guide
                 </button>
               </div>
+              <Link
+                to="/login"
+                className="block text-center px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-medium transition-colors"
+              >
+                Sign in with Real Credentials
+              </Link>
               {mockMode && (
                 <p className="text-xs text-slate-500 mt-2">
                   Application running in {'mock'} development mode.
@@ -70,25 +84,23 @@ export default function ProtectedRoute({ allowedRoles = [] }) {
         </div>
       );
     }
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
 
   // 2. Role restriction check
-  // If allowedRoles is empty, access is permitted (used as fallback).
-  // Otherwise, the user's role must be included in the allowedRoles array.
   const isAuthorized = allowedRoles.length === 0 || allowedRoles.includes(role);
 
   if (!isAuthorized) {
-    const authorizedHome = role === 'admin' ? '/admin' : role === 'guide' ? '/guide' : '/';
+    const authorizedHome = role === 'admin' ? '/admin' : role === 'guide' ? '/guide' : '/student';
 
     const handleRoleSwitch = (targetRole) => {
       switchDevRole(targetRole);
-      // If the current route is allowed for the target role, stay on it;
-      // otherwise navigate to the target role's home dashboard
       if (allowedRoles.includes(targetRole)) {
         navigate(location.pathname, { replace: true });
       } else {
-        navigate(targetRole === 'admin' ? '/admin' : '/guide', { replace: true });
+        navigate(targetRole === 'admin' ? '/admin' : targetRole === 'guide' ? '/guide' : '/student', {
+          replace: true,
+        });
       }
     };
 
@@ -99,31 +111,53 @@ export default function ProtectedRoute({ allowedRoles = [] }) {
             403
           </div>
           <h2 className="text-xl font-bold text-slate-800 mb-2">Access Denied</h2>
-          <p className="text-sm text-slate-600 mb-4">
-            Your authenticated role <strong className="text-slate-800 capitalize">{role}</strong> does not have permission to access this area.
+          <p className="text-sm text-slate-600 mb-6">
+            Your current account role does not have permission to access this area.
           </p>
-          <div className="text-xs text-slate-500 bg-slate-50 rounded-lg p-3 border border-slate-200 mb-6">
-            Required role: <span className="font-mono text-slate-700 font-semibold">{allowedRoles.join(' or ')}</span>
+
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-6 text-left">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+              Session Information
+            </p>
+            <div className="text-xs text-slate-600 space-y-1">
+              <p>
+                <span className="font-medium text-slate-700">Account:</span> {user?.fullName || 'User'}
+              </p>
+              <p>
+                <span className="font-medium text-slate-700">Current Role:</span>{' '}
+                <span className="capitalize px-1.5 py-0.5 rounded bg-slate-200 text-slate-800 font-medium">
+                  {role || 'None'}
+                </span>
+              </p>
+              <p>
+                <span className="font-medium text-slate-700">Required Role:</span>{' '}
+                <span className="capitalize px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">
+                  {allowedRoles.join(' or ')}
+                </span>
+              </p>
+            </div>
           </div>
-          <div className="space-y-2">
+
+          <div className="space-y-3">
             <Link
               to={authorizedHome}
-              className="inline-block w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors"
+              className="block w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold transition-colors"
             >
-              Go to Your Dashboard ({role === 'admin' ? 'Admin' : 'Guide'})
+              Go to Your Dashboard
             </Link>
+
             {isDevMode && (
-              <div className="pt-4 border-t border-slate-100 text-xs">
-                <p className="text-slate-400 mb-2">Dev QA testing — switch role:</p>
+              <div className="pt-2 border-t border-slate-200">
+                <p className="text-xs text-slate-500 mb-2 font-medium">Dev Role Switcher (Testing):</p>
                 <div className="flex justify-center gap-2">
                   {allowedRoles.map((r) => (
                     <button
                       key={r}
                       type="button"
                       onClick={() => handleRoleSwitch(r)}
-                      className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded text-xs font-semibold transition-colors"
+                      className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-xs capitalize transition-colors"
                     >
-                      Switch to {r} & View Page
+                      Switch to {r}
                     </button>
                   ))}
                 </div>
@@ -135,6 +169,5 @@ export default function ProtectedRoute({ allowedRoles = [] }) {
     );
   }
 
-  // 3. Authorized access — render the route outlet
   return <Outlet />;
 }

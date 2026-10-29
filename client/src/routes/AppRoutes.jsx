@@ -3,72 +3,68 @@ import { Routes, Route, Navigate, Link } from 'react-router-dom';
 import ProtectedRoute from './ProtectedRoute';
 import AdminLayout from '../layouts/AdminLayout';
 import GuideLayout from '../layouts/GuideLayout';
+import StudentLayout from '../layouts/StudentLayout';
 import AdminDashboard from '../pages/admin/Dashboard';
 import AdminTeams from '../pages/admin/Teams';
 import AdminProjects from '../pages/admin/Projects';
 import GuideDashboard from '../pages/guide/Dashboard';
 import AssignedTeams from '../pages/guide/AssignedTeams';
+import StudentDashboard from '../pages/student/Dashboard';
+import Login from '../pages/auth/Login';
 import { useAuthSession } from '../services/authSession';
 
-/**
- * Root Home Redirection / Landing
- * Directs active users to their role-specific dashboard.
- * Shows a welcome landing for unauthenticated visitors.
- */
 function HomeRedirect() {
-  const { role, isAuthenticated, isDevMode } = useAuthSession();
+  const { role, isAuthenticated, isLoading } = useAuthSession();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <p role="status" className="text-slate-600 font-medium">Checking session…</p>
+      </div>
+    );
+  }
 
   if (isAuthenticated) {
     if (role === 'admin') return <Navigate to="/admin" replace />;
     if (role === 'guide') return <Navigate to="/guide" replace />;
+    return <Navigate to="/student" replace />;
   }
 
-  // Otherwise show a welcome landing page
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center">
-        <h1 className="text-2xl font-bold text-slate-800 mb-2">PROJEXA</h1>
-        <p className="text-sm text-slate-600 mb-6">Academic Project Management Platform</p>
-        <div className="space-y-3">
-          {isAuthenticated && (
-            <p className="text-sm text-slate-500 mb-4">
-              You are authenticated but your role could not be determined. Please select your portal below.
-            </p>
-          )}
-          {!isAuthenticated && (
-            <div>
-              <Link
-                to="/admin"
-                className="block w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold"
-              >
-                Go to Admin Portal
-              </Link>
-              <Link
-                to="/guide"
-                className="block w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold"
-              >
-                Go to Guide Portal
-              </Link>
-            </div>
-          )}
+    <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+        <div className="inline-flex rounded-2xl bg-indigo-600 text-white font-black text-2xl px-5 py-3 mb-4">P</div>
+        <h1 className="text-3xl font-bold text-slate-900">PROJEXA</h1>
+        <p className="mt-3 text-slate-500 text-sm">
+          Academic project management platform for students, faculty guides, and administrators.
+        </p>
+        <div className="mt-7 space-y-3">
+          <Link
+            to="/login"
+            className="block w-full rounded-lg bg-indigo-600 p-3 text-white font-semibold hover:bg-indigo-700 transition-colors"
+          >
+            Sign in
+          </Link>
+          <div className="flex justify-center gap-3 text-xs text-slate-500 pt-2">
+            <Link to="/student" className="hover:underline">Student</Link>
+            <span>•</span>
+            <Link to="/guide" className="hover:underline">Faculty</Link>
+            <span>•</span>
+            <Link to="/admin" className="hover:underline">Admin</Link>
+          </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
-/**
- * 404 Not Found Page
- */
 function NotFound() {
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center">
+    <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
         <div className="text-4xl font-extrabold text-slate-300 mb-2">404</div>
-        <h2 className="text-lg font-bold text-slate-800 mb-2">Page Not Found</h2>
-        <p className="text-xs text-slate-500 mb-6">
-          The requested route does not exist in PROJEXA.
-        </p>
+        <h1 className="text-xl font-bold text-slate-800 mb-2">Page Not Found</h1>
+        <p className="text-xs text-slate-500 mb-6">The requested route does not exist in PROJEXA.</p>
         <Link
           to="/"
           className="inline-block px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold"
@@ -76,23 +72,24 @@ function NotFound() {
           Return Home
         </Link>
       </div>
-    </div>
+    </main>
   );
 }
 
-/**
- * Primary Application Routes (Member 2 — Frontend B)
- *
- * Configures role-scoped routing for Faculty Guide and Administrator portals.
- * Uses ProtectedRoute to enforce role authorization (FE2-07).
- */
 export default function AppRoutes() {
   return (
     <Routes>
-      {/* Root Landing / Redirect */}
       <Route path="/" element={<HomeRedirect />} />
+      <Route path="/login" element={<Login />} />
 
-      {/* Admin Portal (Protected, requires role: 'admin') */}
+      {/* Student Portal (Protected) */}
+      <Route element={<ProtectedRoute allowedRoles={['student']} />}>
+        <Route element={<StudentLayout />}>
+          <Route path="/student" element={<StudentDashboard />} />
+        </Route>
+      </Route>
+
+      {/* Admin Portal (Protected) */}
       <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
         <Route element={<AdminLayout />}>
           <Route path="/admin" element={<AdminDashboard />} />
@@ -101,7 +98,7 @@ export default function AppRoutes() {
         </Route>
       </Route>
 
-      {/* Guide Portal (Protected, requires role: 'guide') */}
+      {/* Guide Portal (Protected) */}
       <Route element={<ProtectedRoute allowedRoles={['guide']} />}>
         <Route element={<GuideLayout />}>
           <Route path="/guide" element={<GuideDashboard />} />
@@ -109,7 +106,6 @@ export default function AppRoutes() {
         </Route>
       </Route>
 
-      {/* Central 404 Handler */}
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

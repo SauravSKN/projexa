@@ -27,6 +27,7 @@ export default function GuideDashboard() {
 
       try {
         const response = await fetch('/api/v1/dashboard/guide', {
+          credentials: 'include',
           headers: {
             'Accept': 'application/json',
             ...getAuthHeaders(),

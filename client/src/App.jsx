@@ -1,18 +1,22 @@
 import React from 'react';
 import { BrowserRouter } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
 import AppRoutes from './routes/AppRoutes';
 
 /**
  * Root Application Component
  *
- * Configured for Member 2 (Frontend B) with role-gated routing.
- * Note: Member 1 (Frontend A) will provide the outer AuthProvider / SessionProvider
- * once authentication is delivered.
+ * Provides central authentication context and routing for all user portals:
+ * - Student Portal
+ * - Faculty Guide Portal
+ * - Administrator Portal
  */
 export default function App() {
   return (
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

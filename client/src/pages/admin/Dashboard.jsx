@@ -25,6 +25,7 @@ export default function AdminDashboard() {
 
       try {
         const response = await fetch('/api/v1/dashboard/admin', {
+          credentials: 'include',
           headers: {
             'Accept': 'application/json',
             ...getAuthHeaders(),

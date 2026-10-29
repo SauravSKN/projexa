@@ -2,15 +2,41 @@
  * Project Management API Service (Member 2 — Frontend B)
  *
  * Coordinates with BE1 endpoints conforming to the PROJEXA standard envelope:
- * - GET   /api/v1/projects       (Role-scoped projects list)
- * - POST  /api/v1/projects       (Project registration with team mapping)
- * - PATCH /api/v1/projects/:id   (Project metadata update)
+ * - GET  /api/v1/projects  (Role-scoped project directory)
+ * - POST /api/v1/projects  (Admin project registration)
  *
  * Authentication: uses getAuthHeaders() from authSession.
  * Mock role headers are NEVER sent in real API mode or production.
  */
 
 import { getAuthHeaders, isMockMode } from './authSession';
+
+export const SEED_PROJECTS = [
+  {
+    id: '690100000000000000000201',
+    title: 'Projexa Academic Management Platform',
+    description: 'A comprehensive faculty-supervised academic project governance platform.',
+    teamId: '690100000000000000000101',
+    teamName: 'Projexa Demo Team',
+    status: 'in-progress',
+    startDate: '2026-08-01T00:00:00.000Z',
+    targetDate: '2027-05-15T00:00:00.000Z',
+    category: 'Web Application',
+    maxGrade: 100,
+  },
+  {
+    id: '690100000000000000000202',
+    title: 'Autonomous Drone Navigation System',
+    description: 'Indoor autonomous quadcopter positioning using visual-inertial odometry.',
+    teamId: '690100000000000000000102',
+    teamName: 'Aero Robotics Team',
+    status: 'proposed',
+    startDate: '2026-09-01T00:00:00.000Z',
+    targetDate: '2027-04-30T00:00:00.000Z',
+    category: 'Embedded Systems',
+    maxGrade: 100,
+  },
+];
 
 const DEV_PROJECTS_KEY = 'projexa_dev_projects_storage';
 
@@ -22,24 +48,8 @@ function getDevStoredProjects() {
   } catch {
     // fallback
   }
-  const initial = [
-    {
-      id: '690100000000000000000201',
-      title: 'Projexa Demo Capstone',
-      description: 'Web application designed for final-year academic project management across universities.',
-      teamId: '690100000000000000000101',
-      teamName: 'Projexa Demo Team',
-      startDate: '2026-10-01',
-      targetDate: '2026-12-31',
-      status: 'active',
-    },
-  ];
-  try {
-    sessionStorage.setItem(DEV_PROJECTS_KEY, JSON.stringify(initial));
-  } catch {
-    // ignore
-  }
-  return initial;
+  saveDevStoredProjects(SEED_PROJECTS);
+  return SEED_PROJECTS;
 }
 
 function saveDevStoredProjects(projects) {
@@ -57,12 +67,14 @@ function saveDevStoredProjects(projects) {
 export async function getProjects() {
   try {
     const response = await fetch('/api/v1/projects', {
+      credentials: 'include',
       headers: getAuthHeaders(),
     });
     if (response.ok) {
       const json = await response.json();
-      if (json.success && Array.isArray(json.data)) {
-        return { success: true, data: json.data, isLiveApi: true };
+      const list = Array.isArray(json.data) ? json.data : json.data?.projects;
+      if (json.success && Array.isArray(list)) {
+        return { success: true, data: list, isLiveApi: true };
       }
     }
     throw new Error(`API returned HTTP ${response.status}`);
@@ -102,27 +114,29 @@ export async function createProject({ title, description, teamId, startDate, tar
   if (target <= start) {
     return {
       success: false,
-      error: { code: 'VALIDATION_ERROR', message: 'Target completion date must be strictly after the start date' },
+      error: { code: 'VALIDATION_ERROR', message: 'Target date must be strictly after start date' },
     };
   }
 
   try {
     const response = await fetch('/api/v1/projects', {
       method: 'POST',
+      credentials: 'include',
       headers: getAuthHeaders(),
       body: JSON.stringify({
         title: title.trim(),
         description: (description || '').trim(),
         teamId,
-        startDate,
-        targetDate,
-        status: status || 'active',
+        startDate: start.toISOString(),
+        targetDate: target.toISOString(),
+        status: status || 'proposed',
       }),
     });
 
     const json = await response.json();
     if (response.ok && json.success) {
-      return { success: true, data: json.data, isLiveApi: true };
+      const data = json.data?.project || json.data;
+      return { success: true, data, isLiveApi: true };
     }
     return { success: false, error: json.error || { code: 'API_ERROR', message: `Server error ${response.status}` } };
   } catch (err) {
@@ -133,10 +147,12 @@ export async function createProject({ title, description, teamId, startDate, tar
         title: title.trim(),
         description: (description || '').trim(),
         teamId,
-        teamName: 'Selected Team',
-        startDate,
-        targetDate,
-        status: status || 'active',
+        teamName: `Team ${teamId.slice(-4)}`,
+        status: status || 'proposed',
+        startDate: start.toISOString(),
+        targetDate: target.toISOString(),
+        category: 'General',
+        maxGrade: 100,
       };
       const updated = [newProject, ...current];
       saveDevStoredProjects(updated);
