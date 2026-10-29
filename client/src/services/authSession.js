@@ -15,16 +15,14 @@ import { useState, useEffect, useCallback } from 'react';
  *   import { useAuth as useMember1Auth } from '../context/AuthContext';
  *   export const useAuthSession = useMember1Auth;
  *
- * In the meantime, this module provides an isolated, dev-only consumer contract
- * that allows building and verifying Member 2's Admin and Guide portals without
- * blocking on Member 1's deliverable or creating a competing provider.
+ * In the meantime, this module provides an isolated consumer contract that defaults
+ * to an unauthenticated session unless development demo mode is explicitly opted in.
  *
- * SECURITY NOTICE:
- * — Development persona fallback is strictly guarded by `import.meta.env.DEV`.
- * — In production builds, development personas and headers are completely disabled.
- * — Mock mode is never active in production; it requires explicit local enablement.
- * — User-supplied role headers are never trusted as proof of authentication
- *   outside of explicitly enabled development mode.
+ * SECURITY ENFORCEMENT:
+ * — Production builds statically eliminate development impersonation and demo mode.
+ * — Automatic admin login in development is removed; sessions default to unauthenticated.
+ * — Demo mode requires explicit opt-in via VITE_DEMO_MODE=true or session toggle.
+ * — Mock role headers ('x-projexa-role', etc.) are NEVER sent in real API mode or production.
  */
 
 export const DEV_PERSONAS = Object.freeze({
@@ -57,59 +55,107 @@ export const DEV_PERSONAS = Object.freeze({
   },
 });
 
-const DEV_SESSION_KEY = 'projexa_dev_session_role';
-const MOCK_MODE_INDICATOR = 'projexa_mock_mode';
+export const DEV_SESSION_KEY = 'projexa_dev_session_role';
+export const DEMO_MODE_KEY = 'projexa_demo_mode';
+export const MOCK_MODE_INDICATOR = 'projexa_mock_mode';
 
 /**
- * Returns the currently active development role (defaulting to 'admin' in DEV mode).
- * Only returns a value when explicitly in development environment.
+ * Checks whether demo mode is explicitly enabled.
+ * HARD RULE: Production builds can NEVER enable demo mode or development impersonation.
+ * In development, requires explicit opt-in via VITE_DEMO_MODE=true or sessionStorage.
  */
-export function getActiveDevRole() {
-  if (!import.meta.env.DEV) return null;
+export function isDemoModeEnabled() {
+  if (!import.meta.env.DEV) return false;
   try {
-    return sessionStorage.getItem(DEV_SESSION_KEY) || 'admin';
+    if (import.meta.env.VITE_DEMO_MODE === 'true' || import.meta.env.VITE_ENABLE_DEMO_MODE === 'true') {
+      return true;
+    }
+    return sessionStorage.getItem(DEMO_MODE_KEY) === 'true';
   } catch {
-    return 'admin';
+    return false;
   }
 }
 
 /**
- * Switch the active development persona (for manual testing of role-based route guards).
- * Disabled in non-development environments. Dispatches auth change event so
- * all components re-render synchronously when the role switches.
+ * Alias for isDemoModeEnabled for backwards compatibility.
+ */
+export function isMockMode() {
+  return Boolean(import.meta.env.DEV) && isDemoModeEnabled();
+}
+
+/**
+ * Returns the currently active development role if demo mode is enabled.
+ * Defaults to null (unauthenticated). Never automatically logs in as admin.
+ */
+export function getActiveDevRole() {
+  if (!import.meta.env.DEV || !isDemoModeEnabled()) return null;
+  try {
+    const stored = sessionStorage.getItem(DEV_SESSION_KEY);
+    return stored && DEV_PERSONAS[stored] ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Switch the active development persona.
+ * Hard-disabled in production. Explicitly enables demo session when a role is selected.
  */
 export function setDevSessionRole(role) {
   if (!import.meta.env.DEV) return;
-  if (!role) {
-    sessionStorage.removeItem(DEV_SESSION_KEY);
-  } else {
-    sessionStorage.setItem(DEV_SESSION_KEY, role);
+  try {
+    if (!role) {
+      sessionStorage.removeItem(DEV_SESSION_KEY);
+    } else {
+      sessionStorage.setItem(DEMO_MODE_KEY, 'true');
+      sessionStorage.setItem(DEV_SESSION_KEY, role);
+    }
+  } catch {
+    // Ignore storage quota/access errors in restricted environments
   }
   window.dispatchEvent(new Event('projexa_auth_change'));
 }
 
 /**
- * Returns whether the application is operating in mock/development mode.
- * This is explicitly controlled by the presence of `import.meta.env.DEV`.
- * When true, dev personas and storage-based mock data are enabled.
- * When false, all API calls target production endpoints with real session tokens.
+ * Explicitly toggle demo mode on or off in development.
+ * Hard-disabled in production.
  */
-export function isMockMode() {
-  return Boolean(import.meta.env.DEV);
+export function setDemoMode(enabled) {
+  if (!import.meta.env.DEV) return;
+  try {
+    if (enabled) {
+      sessionStorage.setItem(DEMO_MODE_KEY, 'true');
+    } else {
+      sessionStorage.removeItem(DEMO_MODE_KEY);
+      sessionStorage.removeItem(DEV_SESSION_KEY);
+    }
+  } catch {
+    // Ignore
+  }
+  window.dispatchEvent(new Event('projexa_auth_change'));
 }
 
 /**
  * Helper to construct authentication headers for API requests.
- * In development, includes the active dev persona role and ID for backend validation.
- * In production, returns standard headers without any dev persona metadata,
- * ensuring production cannot activate development impersonation.
+ * In real API mode or in production, returns ONLY standard JSON headers.
+ * Mock role headers are NEVER sent in real API mode or in production builds.
+ * Only in explicitly opted-in development demo mode are mock role headers appended.
  */
 export function getAuthHeaders() {
-  const isDev = Boolean(import.meta.env.DEV);
-  const activeRole = isDev ? getActiveDevRole() : null;
-  const user = isDev && activeRole ? DEV_PERSONAS[activeRole] : null;
+  // Production builds or real API mode (demo mode disabled):
+  // Statically dead-code eliminated in production builds.
+  if (!import.meta.env.DEV || !isDemoModeEnabled()) {
+    return {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    };
+  }
 
-  if (isDev && user) {
+  // In development with explicit demo mode opt-in:
+  const activeRole = getActiveDevRole();
+  const user = activeRole ? DEV_PERSONAS[activeRole] : null;
+
+  if (user) {
     return {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
@@ -120,7 +166,6 @@ export function getAuthHeaders() {
     };
   }
 
-  // Production: no dev persona headers, no mock mode indicator
   return {
     'Accept': 'application/json',
     'Content-Type': 'application/json',
@@ -130,35 +175,50 @@ export function getAuthHeaders() {
 /**
  * Primary consumer hook for Member 2 screens.
  * Exposes authenticated session info, role, and dev helpers.
- * Clearly indicates when the application is operating with mock data.
+ * Defaults to unauthenticated (user: null, role: null, isAuthenticated: false)
+ * when demo mode is not enabled.
  */
 export function useAuthSession() {
   const isDev = Boolean(import.meta.env.DEV);
 
   const [activeRole, setActiveRole] = useState(() => (isDev ? getActiveDevRole() : null));
+  const [demoMode, setDemoModeState] = useState(() => (isDev ? isDemoModeEnabled() : false));
 
   useEffect(() => {
+    if (!isDev) return;
     const handleAuthChange = () => {
-      setActiveRole(isDev ? getActiveDevRole() : null);
+      setActiveRole(getActiveDevRole());
+      setDemoModeState(isDemoModeEnabled());
     };
     window.addEventListener('projexa_auth_change', handleAuthChange);
     return () => window.removeEventListener('projexa_auth_change', handleAuthChange);
   }, [isDev]);
 
-  const user = isDev && activeRole ? DEV_PERSONAS[activeRole] || null : null;
+  const user = isDev && demoMode && activeRole ? DEV_PERSONAS[activeRole] || null : null;
   const role = user?.role || null;
   const isAuthenticated = Boolean(user);
 
-  // Explicit mock mode status - only true when in DEV environment
-  const mockMode = isDev;
-
   const switchDevRole = useCallback((newRole) => {
-    setDevSessionRole(newRole);
-  }, []);
+    if (isDev) {
+      setDevSessionRole(newRole);
+    }
+  }, [isDev]);
 
   const logout = useCallback(() => {
     if (isDev) {
       setDevSessionRole(null);
+      try {
+        sessionStorage.removeItem(DEMO_MODE_KEY);
+      } catch {
+        // ignore
+      }
+      window.dispatchEvent(new Event('projexa_auth_change'));
+    }
+  }, [isDev]);
+
+  const toggleDemoMode = useCallback((enabled) => {
+    if (isDev) {
+      setDemoMode(enabled);
     }
   }, [isDev]);
 
@@ -167,10 +227,12 @@ export function useAuthSession() {
     role,
     isAuthenticated,
     isDevMode: isDev,
-    mockMode,
+    mockMode: isDev && demoMode,
+    demoMode: isDev && demoMode,
+    toggleDemoMode,
     switchDevRole,
     logout,
-    availablePersonas: isDev ? DEV_PERSONAS : {},
-    mockModeIndicator: isDev ? MOCK_MODE_INDICATOR : undefined,
+    availablePersonas: isDev && demoMode ? DEV_PERSONAS : {},
+    mockModeIndicator: isDev && demoMode ? MOCK_MODE_INDICATOR : undefined,
   };
 }

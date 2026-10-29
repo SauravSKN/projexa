@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getAuthHeaders } from '../../services/authSession';
+import { getAuthHeaders, isMockMode } from '../../services/authSession';
 
 /**
  * Admin Dashboard View (FE2-02)
@@ -45,7 +45,7 @@ export default function AdminDashboard() {
         // In development, provide the verified seed contract structure so the UI is testable
         // while clearly marking it as development preview data
         if (isMounted) {
-          if (import.meta.env.DEV) {
+          if (isMockMode()) {
             setData({
               studentCount: 5,
               guideCount: 2,

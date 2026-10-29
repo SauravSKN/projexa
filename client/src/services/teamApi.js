@@ -8,12 +8,13 @@
  * - POST  /api/v1/teams               (Team creation with 3-5 students)
  * - PATCH /api/v1/teams/:id           (Guide assignment/reassignment)
  *
- * Authentication: uses getAuthHeaders() from authSession to include
- * development role headers in DEV mode; production uses session tokens
- * via Member 1's AuthContext.
+ * Authentication: uses getAuthHeaders() from authSession.
+ * Mock role headers are NEVER sent in real API mode or production.
  */
 
-const SEED_STUDENTS = [
+import { getAuthHeaders, isMockMode } from './authSession';
+
+export const SEED_STUDENTS = [
   { id: '690100000000000000000021', fullName: 'Aarav Patel', email: 'student.a@demo.projexa.invalid', role: 'student', teamId: '690100000000000000000101' },
   { id: '690100000000000000000022', fullName: 'Diya Rao', email: 'student.b@demo.projexa.invalid', role: 'student', teamId: '690100000000000000000101' },
   { id: '690100000000000000000023', fullName: 'Ishaan Das', email: 'student.c@demo.projexa.invalid', role: 'student', teamId: '690100000000000000000101' },
@@ -24,7 +25,7 @@ const SEED_STUDENTS = [
   { id: '690100000000000000000028', fullName: 'Tanvi Kulkarni', email: 'student.h@demo.projexa.invalid', role: 'student', teamId: null },
 ];
 
-const SEED_GUIDES = [
+export const SEED_GUIDES = [
   { id: '690100000000000000000011', fullName: 'Dr Ananya Shah', email: 'guide.a@demo.projexa.invalid', role: 'guide', teamCount: 1, department: 'Computer Science' },
   { id: '690100000000000000000012', fullName: 'Dr Rohan Mehta', email: 'guide.b@demo.projexa.invalid', role: 'guide', teamCount: 0, department: 'Computer Science' },
   { id: '690100000000000000000013', fullName: 'Dr Vikram Malhotra', email: 'guide.c@demo.projexa.invalid', role: 'guide', teamCount: 0, department: 'Computer Science' },
@@ -57,7 +58,11 @@ function getDevStoredTeams() {
       projectTitle: 'Projexa Demo Capstone',
     },
   ];
-  sessionStorage.setItem(DEV_TEAMS_KEY, JSON.stringify(initial));
+  try {
+    sessionStorage.setItem(DEV_TEAMS_KEY, JSON.stringify(initial));
+  } catch {
+    // ignore
+  }
   return initial;
 }
 
@@ -71,38 +76,12 @@ function saveDevStoredTeams(teams) {
 }
 
 /**
- * Fetches auth headers for API requests.
- * In development, includes the active dev persona role and ID for backend validation.
- * In production, returns standard headers awaiting Member 1 session tokens.
- */
-function fetchHeaders() {
-  const isDev = Boolean(import.meta.env.DEV);
-  const activeRole = isDev ? getActiveDevRole() : null;
-  const user = isDev && activeRole ? DEV_PERSONAS[activeRole] : null;
-
-  if (isDev && user) {
-    return {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      'x-projexa-role': user.role,
-      'x-projexa-user-id': user.id,
-      'x-projexa-user-name': user.fullName,
-    };
-  }
-
-  return {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-  };
-}
-
-/**
  * Fetch all teams from GET /api/v1/teams
  */
 export async function getTeams() {
   try {
     const response = await fetch('/api/v1/teams', {
-      headers: fetchHeaders(),
+      headers: getAuthHeaders(),
     });
     if (response.ok) {
       const json = await response.json();
@@ -112,7 +91,7 @@ export async function getTeams() {
     }
     throw new Error(`API returned HTTP ${response.status}`);
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (isMockMode()) {
       return { success: true, data: getDevStoredTeams(), isLiveApi: false };
     }
     return { success: false, error: err.message, isLiveApi: false };
@@ -125,7 +104,7 @@ export async function getTeams() {
 export async function getEligibleStudents() {
   try {
     const response = await fetch('/api/v1/users?role=student', {
-      headers: fetchHeaders(),
+      headers: getAuthHeaders(),
     });
     if (response.ok) {
       const json = await response.json();
@@ -135,7 +114,7 @@ export async function getEligibleStudents() {
     }
     throw new Error(`API returned HTTP ${response.status}`);
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (isMockMode()) {
       return { success: true, data: SEED_STUDENTS, isLiveApi: false };
     }
     return { success: false, error: err.message, isLiveApi: false };
@@ -148,7 +127,7 @@ export async function getEligibleStudents() {
 export async function getEligibleGuides() {
   try {
     const response = await fetch('/api/v1/users?role=guide', {
-      headers: fetchHeaders(),
+      headers: getAuthHeaders(),
     });
     if (response.ok) {
       const json = await response.json();
@@ -158,7 +137,7 @@ export async function getEligibleGuides() {
     }
     throw new Error(`API returned HTTP ${response.status}`);
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (isMockMode()) {
       return { success: true, data: SEED_GUIDES, isLiveApi: false };
     }
     return { success: false, error: err.message, isLiveApi: false };
@@ -188,7 +167,7 @@ export async function createTeam({ name, session, memberIds, guideId }) {
   try {
     const response = await fetch('/api/v1/teams', {
       method: 'POST',
-      headers: fetchHeaders(),
+      headers: getAuthHeaders(),
       body: JSON.stringify({ name: name.trim(), session: session.trim(), memberIds, guideId: guideId || null }),
     });
 
@@ -198,7 +177,7 @@ export async function createTeam({ name, session, memberIds, guideId }) {
     }
     return { success: false, error: json.error || { code: 'API_ERROR', message: `Server error ${response.status}` } };
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (isMockMode()) {
       // Simulate successful local dev team creation with seed data resolution
       const current = getDevStoredTeams();
       const resolvedMembers = memberIds.map((id) => {
@@ -233,7 +212,7 @@ export async function assignTeamGuide(teamId, guideId) {
   try {
     const response = await fetch(`/api/v1/teams/${teamId}`, {
       method: 'PATCH',
-      headers: fetchHeaders(),
+      headers: getAuthHeaders(),
       body: JSON.stringify({ guideId: guideId || null }),
     });
 
@@ -243,7 +222,7 @@ export async function assignTeamGuide(teamId, guideId) {
     }
     return { success: false, error: json.error || { code: 'API_ERROR', message: `Server error ${response.status}` } };
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (isMockMode()) {
       const current = getDevStoredTeams();
       const resolvedGuide = guideId ? SEED_GUIDES.find((g) => g.id === guideId) : null;
       const updated = current.map((team) => {

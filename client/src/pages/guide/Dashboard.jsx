@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuthSession, getAuthHeaders } from '../../services/authSession';
+import { useAuthSession, getAuthHeaders, isMockMode } from '../../services/authSession';
 
 /**
  * Faculty Guide Dashboard View (FE2-01)
@@ -45,7 +45,7 @@ export default function GuideDashboard() {
         throw new Error(`Endpoint returned status ${response.status}`);
       } catch (err) {
         if (isMounted) {
-          if (import.meta.env.DEV) {
+          if (isMockMode()) {
             // Verified contract schema fallback from docs/api/dashboard.md
             setData({
               assignedTeamCount: 1,

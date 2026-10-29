@@ -6,10 +6,11 @@
  * - POST  /api/v1/projects       (Project registration with team mapping)
  * - PATCH /api/v1/projects/:id   (Project metadata update)
  *
- * Authentication: uses getAuthHeaders() from authSession to include
- * development role headers in DEV mode; production uses session tokens
- * via Member 1's AuthContext.
+ * Authentication: uses getAuthHeaders() from authSession.
+ * Mock role headers are NEVER sent in real API mode or production.
  */
+
+import { getAuthHeaders, isMockMode } from './authSession';
 
 const DEV_PROJECTS_KEY = 'projexa_dev_projects_storage';
 
@@ -33,7 +34,11 @@ function getDevStoredProjects() {
       status: 'active',
     },
   ];
-  sessionStorage.setItem(DEV_PROJECTS_KEY, JSON.stringify(initial));
+  try {
+    sessionStorage.setItem(DEV_PROJECTS_KEY, JSON.stringify(initial));
+  } catch {
+    // ignore
+  }
   return initial;
 }
 
@@ -47,38 +52,12 @@ function saveDevStoredProjects(projects) {
 }
 
 /**
- * Fetches auth headers for API requests.
- * In development, includes the active dev persona role and ID for backend validation.
- * In production, returns standard headers awaiting Member 1 session tokens.
- */
-function fetchHeaders() {
-  const isDev = Boolean(import.meta.env.DEV);
-  const activeRole = isDev ? getActiveDevRole() : null;
-  const user = isDev && activeRole ? DEV_PERSONAS[activeRole] : null;
-
-  if (isDev && user) {
-    return {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-      'x-projexa-role': user.role,
-      'x-projexa-user-id': user.id,
-      'x-projexa-user-name': user.fullName,
-    };
-  }
-
-  return {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-  };
-}
-
-/**
  * Fetch all projects from GET /api/v1/projects
  */
 export async function getProjects() {
   try {
     const response = await fetch('/api/v1/projects', {
-      headers: fetchHeaders(),
+      headers: getAuthHeaders(),
     });
     if (response.ok) {
       const json = await response.json();
@@ -88,7 +67,7 @@ export async function getProjects() {
     }
     throw new Error(`API returned HTTP ${response.status}`);
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (isMockMode()) {
       return { success: true, data: getDevStoredProjects(), isLiveApi: false };
     }
     return { success: false, error: err.message, isLiveApi: false };
@@ -130,7 +109,7 @@ export async function createProject({ title, description, teamId, startDate, tar
   try {
     const response = await fetch('/api/v1/projects', {
       method: 'POST',
-      headers: fetchHeaders(),
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         title: title.trim(),
         description: (description || '').trim(),
@@ -147,7 +126,7 @@ export async function createProject({ title, description, teamId, startDate, tar
     }
     return { success: false, error: json.error || { code: 'API_ERROR', message: `Server error ${response.status}` } };
   } catch (err) {
-    if (import.meta.env.DEV) {
+    if (isMockMode()) {
       const current = getDevStoredProjects();
       const newProject = {
         id: `690100000000000000000${String(current.length + 201).padStart(3, '0')}`,
